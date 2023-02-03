@@ -1,0 +1,38 @@
+/* Generate the data */
+Generate_data(min_meas, max_meas, data, data_count);
+
+/* Create bins for storing counts */
+Generate_bins(min_meas, max_meas, bin_maxes, bin_counts, bin_count);
+
+
+/* Count number of values in each bin */
+int j;
+
+// Note: I assume all variables used beyond this point are already declared. 
+// I also assume that loc_bin_counts is an array of size bin_count * thread_count
+
+// The only variables that need to be private are the count variales (i and j) and the variable bin
+// The only public variables written to are bin_counts and loc_bin_counts. In both cases, there will not
+// be any race conditions so they are ok being public. 
+# pragma omp parallel num_threads(thread_count) shared(loc_bin_counts, data_count, bin_maxes, bin_count, min_meas, data) private(i, j, bin) {
+
+    int my_rank = omp_get_thread_num(); // assigns my_rank to the thread's number
+    int my_offset = my_rank*bin_count;
+    
+    // Splitting assigned threads into a for loop to create local bin counts
+    # pragma omp for
+    for (i = 0; i < data_count; i++) {
+      bin = What_bin(data[i], bin_maxes, bin_count, min_meas);
+      loc_bin_counts[my_offset + bin]++;
+    }
+    // Wait for all threads to complete previous for loop
+    # pragma omp barrier
+
+    // Splitting assigned threads into another for loop to sum up totals
+    # pragma omp for
+    for (i = 0; i < bin_count; i++)
+      for (j = 0; j < thread_count; j++) {
+        // bin_counts[i] will only be accessed by a single thread. Same with loc_bin_counts[j*bin_count + i]
+        bin_counts[i] += loc_bin_counts[j*bin_count + i]; 
+      }
+}
